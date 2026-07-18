@@ -25,7 +25,6 @@ global WorkerAutoTravelArg := -1
 global WorkerComboAutoStart := false
 global WorkerComboClassIdArg := 0
 global WorkerStartAttempts := 0
-global WorkerIsDLArg := 0 ; Biến nhận tham số truyền từ Manager sang
 global WorkerMaxStartAttempts := 15
 global InstanceMutexHandle := 0
 global ManagerAccountRows := []
@@ -149,8 +148,7 @@ global NativeLastCloserTick := 0
 global OrdinaryEventBase := 0
 ; Mua He and Tho Ngoc have the highest priority. Rows 1 (Dai Chien Loren),
 ; 3 (Tu Than Xuong So), 4 (Rong Do) and 8 (Boss Class) are always excluded.
-global PriorityEventRows := [ 6, 5, 2, 7, 10, 11, 12, 9, 13, 14, 15, 16, 17, 18]
-global SavedEventsAllowed := "6,5,2,7,10,11,12,9,13,14,15,16,17,18" ; <-- Thêm dòng này để lưu chuỗi Event được chọn
+global PriorityEventRows := [6, 5, 2, 7, 10, 11, 12, 9, 13, 14, 15, 16, 17, 18]
 global CompletedEventRows := {}
 global CurrentEventRow := 0
 global CurrentEventMap := -1
@@ -310,8 +308,6 @@ for _, arg in A_Args
         WorkerMultiBossArg := multiMatch1 + 0
     else if (RegExMatch(arg, "i)^--travel=([01])$", travelMatch))
         WorkerAutoTravelArg := travelMatch1 + 0
-	else if (RegExMatch(arg, "i)^--isdl=([01])$", dlMatch))
-		WorkerIsDLArg := dlMatch1 + 0
 }
 if (SyntaxCheckOnly)
     ExitApp
@@ -363,8 +359,6 @@ if (WorkerMode)
         }
     }
     if (!AcquireInstanceMutex("Local\MU-PKZ.AutoHunt.Worker." . WorkerTargetPid))
-	if (WorkerIsDLArg >= 0)
-    IsDarkLordClass := WorkerIsDLArg
         ExitApp
 }
 else
@@ -403,7 +397,6 @@ SetScaledGuiFont(9, "Norm")
 Gui, Add, GroupBox, % ScaleGuiOptions("xm y+14 w460 h250"), MODULE SAN QUAI
 Gui, Add, Button, % ScaleGuiOptions("xp+12 yp+22 w100 h28 gStartHunt vStartHuntButton"), BAT DAU
 Gui, Add, Button, % ScaleGuiOptions("x+8 yp w80 h28 gStopHunt vStopHuntButton Disabled"), DUNG
-Gui, Add, Button, % ScaleGuiOptions("x+8 yp w95 h28 gMoBangChonEvent vFilterEventButton"), Bo loc Event
 Gui, Add, Text, % ScaleGuiOptions("x+12 yp+7"), Ctrl+F1: bat/dung
 Gui, Add, Text, % ScaleGuiOptions("xm+12 y+10 w430"), Loi san: Auto Train Helper (khong click chuot tan cong)
 Gui, Add, CheckBox, % ScaleGuiOptions("xm+12 y+6 vActivePatrol gSaveSettings Checked"), Tuan tra voi su kien nhieu quai
@@ -415,7 +408,6 @@ Gui, Add, Text, % ScaleGuiOptions("xm+12 y+8"), Khong con quai trong:
 Gui, Add, Edit, % ScaleGuiOptions("x+7 yp-3 w45 vMapEmptySeconds gSaveSettings Number Limit3"), 15
 Gui, Add, Text, % ScaleGuiOptions("x+4 yp+3"), giay
 Gui, Add, Text, % ScaleGuiOptions("xm+12 y+8 w435 vHuntStatusText c666666"), Chua bat - bam BAT DAU hoac Ctrl+F1
-Gui, Add, CheckBox, % ScaleGuiOptions("xm y+10 vIsDarkLordClass gSaveDLClassSetting"), Nhan vat nay la Class DL (Trieu Tap + Helper)
 
 ; --- Combo Module GroupBox ---
 Gui, Add, GroupBox, % ScaleGuiOptions("xm y+14 w460 h75"), MODULE COMBO
@@ -430,7 +422,6 @@ Gui, Add, Text, % ScaleGuiOptions("xm y+10 w460 h42 vStatusText c0066CC"), Mo ga
 Gui, Add, CheckBox, % ScaleGuiOptions("xm y+0 w0 h0 vHuntEnabled Hidden"), hunt
 
 ApplyPersistentSettings()
-CapNhatMangPriorityEvent()
 Gui, Show, Hide, MU-PKZ Worker - GamePID %WorkerTargetPid%
 SetTimer, RefreshEngine, 250
 SetTimer, HuntLoop, 100
@@ -445,8 +436,6 @@ if (WorkerAutoStart)
     SetTimer, WorkerStartHunt, -700
 if (WorkerComboAutoStart)
     SetTimer, WorkerStartCombo, -1000
-RegRead, IsDarkLordClass, HKCU, %SettingsRegKey%, IsDarkLordClass, 0
-GuiControl,, IsDarkLordClass, %IsDarkLordClass%	
 return
 
 ; ========== GUI EVENT HANDLERS ==========
@@ -464,11 +453,10 @@ InitializeManagerGui:
     Gui, Add, Text, % ScaleGuiOptions("x172 y102 w360 vManagerSummaryText c0066CC"), Dang tim cua so game...
     Gui, Add, Text, % ScaleGuiOptions("x38 y128 w610 h20 c666666"), Tick = bat auto ngay | Bo tick = dung auto ngay cho nhan vat do
     Gui, Add, ListView, % ScaleGuiOptions("x38 y150 w614 h185 vManagerAccounts gManagerAccountToggled Checked Grid AltSubmit"), Chon|Nhan vat|PID|Map|Trang thai
-    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h75"), BO LOC SU KIEN
-	Gui, Add, Button, % ScaleGuiOptions("x52 y375 w160 h32 gMoBangChonEventManager"), Cau hinh Event nang cao	
-; --- ĐOẠN CODE THÊM Ô TICK BOX CHO CLASS DL VÀO GIAO DIỆN CHÍNH (MANAGER) ---
-	Gui, Add, CheckBox, % ScaleGuiOptions("x+20 yp+6 vIsDarkLordClass gSaveDLClassSetting"), Nhan vat nay la Class DL (Trieu Tap + Helper)
-
+    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h105"), BO LOC SU KIEN
+    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y370 vManagerHuntSingleBoss gManagerOptionsChanged Checked"), San boss don (Viem Dia/Chien Than/Ma Than/Ta Than)
+    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y395 vManagerHuntMultiBoss gManagerOptionsChanged Checked"), San su kien nhieu quai/boss
+    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y420 vManagerAutoTravel gManagerOptionsChanged Checked"), Tu di chuyen theo bang su kien H
     Gui, Add, Button, % ScaleGuiOptions("x38 y462 w135 h32 gManagerStartSelected"), TICK TAT CA
     Gui, Add, Button, % ScaleGuiOptions("x184 y462 w135 h32 gManagerStopSelected"), BO TICK TAT CA
     Gui, Add, Text, % ScaleGuiOptions("x335 y470 w295"), Ctrl+F1: tam dung/khoi phuc nhom tick
@@ -550,10 +538,12 @@ ManagerComboSpeedChanged:
 return
 
 ManagerOptionsChanged:
-; Bỏ qua việc đọc checkbox cũ, chỉ thông báo cập nhật
-NotifyManagerWorkersSettingsChanged()
+    GuiControlGet, managerSingle,, ManagerHuntSingleBoss
+    GuiControlGet, managerMulti,, ManagerHuntMultiBoss
+    GuiControlGet, managerTravel,, ManagerAutoTravel
+    SaveManagerSettings(managerSingle, managerMulti, managerTravel)
+    NotifyManagerWorkersSettingsChanged()
 return
-
 
 WorkerStartHunt:
     if (!WorkerMode)
@@ -1001,66 +991,7 @@ HuntLoop:
 
     ; Helper is the only combat/loot core. No synthetic attack click or Space.
     BuiltinHuntTick(loopGeneration)
-	
-BuiltinHuntTick(generation)
-{
-    global
-    if (!IsHuntTokenValid(generation))
-	    ; =========================================================================
-    ; --- ĐOẠN MÃ TRIỆU TẬP & ĐÓNG BĂNG LUỒNG ĐÁNH 5 GIÂY CHO CLASS DL ---
-    ; =========================================================================
-    if (IsDarkLordClass) 
-    {
-        ; Nếu phát hiện có mục tiêu Boss (CurrentTarget != -1) và chưa gọi hội ở trận này
-        if (CurrentTarget != -1 && !DLHasSummonedOnThisEvent) 
-        {
-            ; Bật cờ ẩn để khóa luồng, không bị spam phím liên tục trong vòng lặp 100ms
-            DLHasSummonedOnThisEvent := true
-            
-            ; Lấy HWND định danh của cửa sổ game đang chạy ngầm
-            ControlGet, hwnd, hWnd,, , ahk_exe Engine.exe
-            
-            ; 1. TẮT MU Helper bằng hàm ghi nhớ RAM có sẵn trong file của bạn
-            SetBuiltinHelperState(false)
-            Sleep, 400 ; Chờ game xả trạng thái khóa kỹ năng tấn công
-            
-            ; 2. Ép giữ phím số 6 ngầm để chọn skill Triệu Tập của DL
-            PostMessage, 0x0100, 0x36, 0, , ahk_id %hwnd% ; WM_KEYDOWN phím 6
-            Sleep, 150
-            PostMessage, 0x0101, 0x36, 0, , ahk_id %hwnd% ; WM_KEYUP phím 6
-            Sleep, 500 ; Chờ game chuyển đổi chiêu thức thành công
-            
-            ; 3. Click chuột phải ngầm ra giữa màn hình game để xuất chiêu Triệu Tập (Summon)
-            ControlClick, x400 y300, ahk_exe Engine.exe, , RIGHT, 1, NA
-            
-            ; 4. Đóng băng toàn bộ luồng lặp của Tool đúng 5 giây để chờ đồng đội tập hợp
-            Sleep, 5000 
-            
-            ; 5. BẬT LẠI MU Helper bằng hàm ghi nhớ RAM có sẵn để tiến hành đánh Boss
-            SetBuiltinHelperState(true)
-            Sleep, 300
-            
-            return ; Thoát sớm vòng lặp hiện tại để áp dụng trạng thái đánh mới
-        }
-    }
-    
-    ; Reset lại cờ triệu tập khi trận săn Boss kết thúc hoàn toàn (CurrentTarget quay về -1)
-    if (CurrentTarget = -1 && DLHasSummonedOnThisEvent) {
-        DLHasSummonedOnThisEvent := false
-    }
-    ; =========================================================================
-
-        return
-
-	}
-    
-    ; Reset lại cờ triệu tập khi trận săn Boss kết thúc hoàn toàn (CurrentTarget quay về -1)
-    if (CurrentTarget = -1 && DLHasSummonedOnThisEvent) {
-        DLHasSummonedOnThisEvent := false
-    }
-    ; =========================================================================
-	
-        return
+return
 
 IsHuntTokenValid(expectedGeneration := -1)
 {
@@ -1789,7 +1720,7 @@ RefreshManagerAccounts()
     }
     for _, account in accounts
     {
-        huntState := account.huntOn ? "DANG SAN BOSS NE BABE" : (account.state = "STARTING" ? "Dang khoi dong" : "DANG DUNG NGAM CANH")
+        huntState := account.huntOn ? "DANG SAN NEN" : (account.state = "STARTING" ? "Dang khoi dong" : "Dang dung")
         Gui, ListView, ManagerAccounts
         huntOption := ManagerDesiredWorkers[account.pid] ? "Check" : ""
         LV_Add(huntOption, "", account.character, account.pid, account.mapId, huntState)
@@ -2082,11 +2013,15 @@ HandleManagerHuntToggle(eventKind, flags, row)
     {
         GuiControlGet, singleBoss,, ManagerHuntSingleBoss
         GuiControlGet, multiBoss,, ManagerHuntMultiBoss
-; if (!ManagerHuntSingleBoss && !ManagerHuntMultiBoss && !ManagerAutoTravel)
-; {
-;     MsgBox, , , Hay bat it nhat mot nhom su kien truoc khi tick acc.
-;     return
-; }
+        if (!singleBoss && !multiBoss)
+        {
+            ManagerListRebuilding := true
+            LV_Modify(row, "-Check")
+            ManagerListRebuilding := false
+            GuiControl, +cCC0000, ManagerStatusText
+            GuiControl,, ManagerStatusText, Hay bat it nhat mot nhom su kien truoc khi tick acc.
+            return
+        }
     }
     ManagerDesiredWorkers[gamePid] := want
     SaveManagerEnabledCharacters()
@@ -2278,12 +2213,6 @@ LaunchManagerWorker(gamePid, startHunt, startCombo := false)
         return false
     args := " --worker-pid=" . gamePid . " --single=" . (singleBoss ? 1 : 0)
         . " --multi=" . (multiBoss ? 1 : 0) . " --travel=" . (autoTravel ? 1 : 0)
-	command := (A_IsCompiled ? ... ) ; (Giữ nguyên dòng này)
-    . " --worker-pid=" . pid
-    . ...
-    . " --travel=" . SavedAutoEventTravel
-    . " --isdl=" . IsDarkLordClass ; <--- THÊM DÒNG NÀY
-	
     if (startHunt)
         args .= " --worker-autostart"
     if (startCombo)
@@ -4221,18 +4150,22 @@ RestoreBuiltinHelperConfig()
         && WriteByte(BuiltinHelperBase + 0x74, BuiltinOriginalPickupAll)
         && WriteByte(BuiltinHelperBase + 0x75, BuiltinOriginalPickupSelected)
 }
-StartBuiltinHelper()
+
+ReadBuiltinHelperActive(ByRef active)
 {
-    global
+    global BuiltinHelperBase
+    if (!ReadByte(BuiltinHelperBase + 0x98, rawActive))
+        return false
+    active := (rawActive != 0)
     return true
 }
-
 
 IsBuiltinHelperActive()
 {
     return (ReadBuiltinHelperActive(active) && active)
 }
 
+StartBuiltinHelper()
 {
     global BuiltinHelperStartAddress
     if (!ReadBuiltinHelperActive(active))
@@ -7072,5 +7005,3 @@ SaveDLClassSetting:
     ; Lưu trạng thái vào khóa Registry dùng chung của hệ thống MU-PKZ
     RegWrite, REG_DWORD, HKCU, %SettingsRegKey%, IsDarkLordClass, %IsDarkLordClass%
 return
-
-
