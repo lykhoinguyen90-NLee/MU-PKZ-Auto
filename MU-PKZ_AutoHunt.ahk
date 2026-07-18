@@ -12,6 +12,9 @@ SetKeyDelay, 0, 0
 
 ; ========== GLOBAL VARIABLES ==========
 ; --- Process / Memory ---
+global IsClassDL := 1                ; Đặt thành 1 nếu acc này là DL, đặt thành 0 nếu là class khác
+global SummonSkillKey := "6"         ; Phím cài đặt skill Triệu Hồi (Summon) trong game
+global HasSummonedCurrentBoss := 0   ; Biến trạng thái để kiểm tra xem đã triệu hồi ở Boss này chưa
 global hProcess := 0
 global GamePid := 0
 global GameHwnd := 0
@@ -468,16 +471,16 @@ InitializeManagerGui:
     SetScaledGuiFont(12, "Bold")
     Gui, Add, Text, % ScaleGuiOptions("xm ym"), MU-PKZ - MULTI ACCOUNT AUTO HUNT
     SetScaledGuiFont(9, "Norm")
-    Gui, Add, Text, % ScaleGuiOptions("xm y+8 w600"), Chay nen theo tung Engine.exe - khong chiem chuot/ban phim Windows
+    Gui, Add, Text, % ScaleGuiOptions("xm y+8 w600"), Chạy nền theo từng Engine.exe - Không chiếm chuột/Bàn phím Windows
     Gui, Add, Tab3, % ScaleGuiOptions("x20 y62 w650 h485 vManagerTabs"), SAN BOSS|AUTO COMBO
     Gui, Tab, 1
     Gui, Add, Button, % ScaleGuiOptions("x38 y96 w120 h28 gManagerRefreshAccounts"), QUET TAI KHOAN
     Gui, Add, Text, % ScaleGuiOptions("x172 y102 w360 vManagerSummaryText c0066CC"), Dang tim cua so game...
-    Gui, Add, Text, % ScaleGuiOptions("x38 y128 w610 h20 c666666"), Tick = bat auto ngay | Bo tick = dung auto ngay cho nhan vat do
+    Gui, Add, Text, % ScaleGuiOptions("x38 y128 w610 h20 c666666"), Tick = Bật Auto ngay | Bỏ tick = Dừng Auto cho nhân vật đó
     Gui, Add, ListView, % ScaleGuiOptions("x38 y150 w614 h185 vManagerAccounts gManagerAccountToggled Checked Grid AltSubmit"), Chon|Nhan vat|PID|Map|Trang thai
 
     ; --- KHU VUC BO LOC 18 DANH MUC BOSS ---
-    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h115"), BO LOC 18 DANH MUC BOSS
+    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h115"), MENU BOSS MỜI BẠN ORDER! XIN VUI LÒNG PHỤC VỤ QUÝ KHÁCH!
 
     ; Cot 1: Dong 1 den 6 (Bat dau tu x55 y365)
     Loop, 6 {
@@ -710,6 +713,9 @@ StartHunt:
     }
     GuiControl,, HuntEnabled, 1
     ResetHuntState()
+	global HasSummonedCurrentBoss
+HasSummonedCurrentBoss := 0
+
     Gosub, ToggleHunt
 return
 
@@ -724,6 +730,7 @@ return
 
 ResetHuntState()
 {
+
     global
     ReleaseTargetClaim()
     HuntGeneration += 1
@@ -2065,9 +2072,19 @@ HandleManagerHuntToggle(eventKind, flags, row)
         return
     if (want)
     {
-        GuiControlGet, singleBoss,, ManagerHuntSingleBoss
-        GuiControlGet, multiBoss,, ManagerHuntMultiBoss
-        if (!singleBoss && !multiBoss)
+        ; Quét kiểm tra xem người dùng có tích chọn mục nào trong 18 Boss không
+        hasAnyBossSelected := false
+        Loop, 18 
+        {
+            if (BossFilters[A_Index] == 1) 
+            {
+                hasAnyBossSelected := true
+                break
+            }
+        }
+
+        ; Nếu không có mục Boss nào được chọn thì tự động nhả tích nhân vật và báo lỗi
+        if (!hasAnyBossSelected)
         {
             ManagerListRebuilding := true
             LV_Modify(row, "-Check")
@@ -2083,6 +2100,7 @@ HandleManagerHuntToggle(eventKind, flags, row)
     GuiControl,, ManagerStatusText, % want ? "Dang bat auto cho PID " . gamePid . "..." : "Dang dung auto cho PID " . gamePid . "..."
     ReconcileManagerWorkers()
 }
+
 
 HandleManagerComboToggle(eventKind, flags, row)
 {
@@ -2327,15 +2345,26 @@ SetAllManagerHuntDesired(enable)
     global ManagerAccountRows, ManagerDesiredWorkers, ManagerListRebuilding
     if (enable)
     {
-        GuiControlGet, singleBoss,, ManagerHuntSingleBoss
-        GuiControlGet, multiBoss,, ManagerHuntMultiBoss
-        if (!singleBoss && !multiBoss)
+        ; Quét kiểm tra xem người dùng có tích chọn mục nào trong 18 Boss không
+        hasAnyBossSelected := false
+        Loop, 18 
+        {
+            if (BossFilters[A_Index] == 1) 
+            {
+                hasAnyBossSelected := true
+                break
+            }
+        }
+        
+        ; Nếu không có mục Boss nào được chọn thì tiến hành báo lỗi và chặn lại
+        if (!hasAnyBossSelected)
         {
             GuiControl, +cCC0000, ManagerStatusText
             GuiControl,, ManagerStatusText, Hay bat it nhat mot nhom su kien truoc khi tick acc.
             return false
         }
     }
+
     ManagerListRebuilding := true
     Gui, ListView, ManagerAccounts
     row := 0
@@ -7079,4 +7108,32 @@ OnBossFilterChanged:
         BossFilters[A_Index] := FilterBoss%A_Index%
     }
     RebuildPriorityRows() ; Cập nhật lại mảng ưu tiên ngay lập tức
+	
+    ; === ĐOẠN MÃ THAY THẾ DÀNH RIÊNG CHO CLASS DL ===
+    if (IsClassDL == 1) 
+    {
+        ; Nếu con Boss này chưa được triệu hồi thành viên trong lượt này
+        if (HasSummonedCurrentBoss == 0) 
+        {
+            ; 1. Bấm phím skill số 6 cài sẵn chiêu Triệu Hồi
+            ControlSend,, %SummonSkillKey%, ahk_id %hwndGame%
+            Sleep, 300 ; Chờ 0.3 giây cho game chuyển đổi skill hoàn tất
+            
+            ; 2. Click chuột phải chạy nền vào tâm màn hình (tọa độ x400 y300) để Triệu Hồi
+            ControlClick, x400 y300, ahk_id %hwndGame%,, Right, 1, NA
+            
+            ; Đánh dấu đã triệu hồi xong, tránh việc vòng lặp quét liên tục bấm lại phím 6
+            HasSummonedCurrentBoss := 1
+            
+            ; 3. Đứng bất động đợi đúng 5 giây cho thành viên Guild/Party dịch chuyển lên
+            Sleep, 5000
+        }
+    }
+
+    ; Sau khi xử lý DL xong (hoặc nếu là Class khác), tiến hành bật Helper như bình thường
+    ; Hãy sửa phím {End} thành {Home} nếu server của bạn dùng phím Home để bật Helper nhé
+    ControlSend,, {End}, ahk_id %hwndGame% 
+    ; ================================================
+
+	
 return
