@@ -148,7 +148,8 @@ global NativeLastCloserTick := 0
 global OrdinaryEventBase := 0
 ; Mua He and Tho Ngoc have the highest priority. Rows 1 (Dai Chien Loren),
 ; 3 (Tu Than Xuong So), 4 (Rong Do) and 8 (Boss Class) are always excluded.
-global PriorityEventRows := [6, 5, 2, 7, 10, 11, 12, 9, 13, 14, 15, 16, 17, 18]
+global PriorityEventRows := [ 6, 5, 2, 7, 10, 11, 12, 9, 13, 14, 15, 16, 17, 18]
+global SavedEventsAllowed := "6,5,2,7,10,11,12,9,13,14,15,16,17,18" ; <-- Thêm dòng này để lưu chuỗi Event được chọn
 global CompletedEventRows := {}
 global CurrentEventRow := 0
 global CurrentEventMap := -1
@@ -397,6 +398,7 @@ SetScaledGuiFont(9, "Norm")
 Gui, Add, GroupBox, % ScaleGuiOptions("xm y+14 w460 h250"), MODULE SAN QUAI
 Gui, Add, Button, % ScaleGuiOptions("xp+12 yp+22 w100 h28 gStartHunt vStartHuntButton"), BAT DAU
 Gui, Add, Button, % ScaleGuiOptions("x+8 yp w80 h28 gStopHunt vStopHuntButton Disabled"), DUNG
+Gui, Add, Button, % ScaleGuiOptions("x+8 yp w95 h28 gMoBangChonEvent vFilterEventButton"), Bo loc Event
 Gui, Add, Text, % ScaleGuiOptions("x+12 yp+7"), Ctrl+F1: bat/dung
 Gui, Add, Text, % ScaleGuiOptions("xm+12 y+10 w430"), Loi san: Auto Train Helper (khong click chuot tan cong)
 Gui, Add, CheckBox, % ScaleGuiOptions("xm+12 y+6 vActivePatrol gSaveSettings Checked"), Tuan tra voi su kien nhieu quai
@@ -408,6 +410,7 @@ Gui, Add, Text, % ScaleGuiOptions("xm+12 y+8"), Khong con quai trong:
 Gui, Add, Edit, % ScaleGuiOptions("x+7 yp-3 w45 vMapEmptySeconds gSaveSettings Number Limit3"), 15
 Gui, Add, Text, % ScaleGuiOptions("x+4 yp+3"), giay
 Gui, Add, Text, % ScaleGuiOptions("xm+12 y+8 w435 vHuntStatusText c666666"), Chua bat - bam BAT DAU hoac Ctrl+F1
+Gui, Add, CheckBox, % ScaleGuiOptions("xm y+10 vIsDarkLordClass gSaveDLClassSetting"), Nhan vat nay la Class DL (Trieu Tap + Helper)
 
 ; --- Combo Module GroupBox ---
 Gui, Add, GroupBox, % ScaleGuiOptions("xm y+14 w460 h75"), MODULE COMBO
@@ -422,6 +425,7 @@ Gui, Add, Text, % ScaleGuiOptions("xm y+10 w460 h42 vStatusText c0066CC"), Mo ga
 Gui, Add, CheckBox, % ScaleGuiOptions("xm y+0 w0 h0 vHuntEnabled Hidden"), hunt
 
 ApplyPersistentSettings()
+CapNhatMangPriorityEvent()
 Gui, Show, Hide, MU-PKZ Worker - GamePID %WorkerTargetPid%
 SetTimer, RefreshEngine, 250
 SetTimer, HuntLoop, 100
@@ -436,6 +440,8 @@ if (WorkerAutoStart)
     SetTimer, WorkerStartHunt, -700
 if (WorkerComboAutoStart)
     SetTimer, WorkerStartCombo, -1000
+RegRead, IsDarkLordClass, HKCU, %SettingsRegKey%, IsDarkLordClass, 0
+GuiControl,, IsDarkLordClass, %IsDarkLordClass%	
 return
 
 ; ========== GUI EVENT HANDLERS ==========
@@ -453,10 +459,11 @@ InitializeManagerGui:
     Gui, Add, Text, % ScaleGuiOptions("x172 y102 w360 vManagerSummaryText c0066CC"), Dang tim cua so game...
     Gui, Add, Text, % ScaleGuiOptions("x38 y128 w610 h20 c666666"), Tick = bat auto ngay | Bo tick = dung auto ngay cho nhan vat do
     Gui, Add, ListView, % ScaleGuiOptions("x38 y150 w614 h185 vManagerAccounts gManagerAccountToggled Checked Grid AltSubmit"), Chon|Nhan vat|PID|Map|Trang thai
-    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h105"), BO LOC SU KIEN
-    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y370 vManagerHuntSingleBoss gManagerOptionsChanged Checked"), San boss don (Viem Dia/Chien Than/Ma Than/Ta Than)
-    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y395 vManagerHuntMultiBoss gManagerOptionsChanged Checked"), San su kien nhieu quai/boss
-    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y420 vManagerAutoTravel gManagerOptionsChanged Checked"), Tu di chuyen theo bang su kien H
+    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h75"), BO LOC SU KIEN
+	Gui, Add, Button, % ScaleGuiOptions("x52 y375 w160 h32 gMoBangChonEventManager"), Cau hinh Event nang cao	
+; --- ĐOẠN CODE THÊM Ô TICK BOX CHO CLASS DL VÀO GIAO DIỆN CHÍNH (MANAGER) ---
+	Gui, Add, CheckBox, % ScaleGuiOptions("x+20 yp+6 vIsDarkLordClass gSaveDLClassSetting"), Nhan vat nay la Class DL (Trieu Tap + Helper)
+
     Gui, Add, Button, % ScaleGuiOptions("x38 y462 w135 h32 gManagerStartSelected"), TICK TAT CA
     Gui, Add, Button, % ScaleGuiOptions("x184 y462 w135 h32 gManagerStopSelected"), BO TICK TAT CA
     Gui, Add, Text, % ScaleGuiOptions("x335 y470 w295"), Ctrl+F1: tam dung/khoi phuc nhom tick
@@ -538,12 +545,10 @@ ManagerComboSpeedChanged:
 return
 
 ManagerOptionsChanged:
-    GuiControlGet, managerSingle,, ManagerHuntSingleBoss
-    GuiControlGet, managerMulti,, ManagerHuntMultiBoss
-    GuiControlGet, managerTravel,, ManagerAutoTravel
-    SaveManagerSettings(managerSingle, managerMulti, managerTravel)
-    NotifyManagerWorkersSettingsChanged()
+; Bỏ qua việc đọc checkbox cũ, chỉ thông báo cập nhật
+NotifyManagerWorkersSettingsChanged()
 return
+
 
 WorkerStartHunt:
     if (!WorkerMode)
@@ -1720,7 +1725,7 @@ RefreshManagerAccounts()
     }
     for _, account in accounts
     {
-        huntState := account.huntOn ? "DANG SAN NEN" : (account.state = "STARTING" ? "Dang khoi dong" : "Dang dung")
+        huntState := account.huntOn ? "DANG SAN BOSS NE BABE" : (account.state = "STARTING" ? "Dang khoi dong" : "DANG DUNG NGAM CANH")
         Gui, ListView, ManagerAccounts
         huntOption := ManagerDesiredWorkers[account.pid] ? "Check" : ""
         LV_Add(huntOption, "", account.character, account.pid, account.mapId, huntState)
@@ -2013,15 +2018,11 @@ HandleManagerHuntToggle(eventKind, flags, row)
     {
         GuiControlGet, singleBoss,, ManagerHuntSingleBoss
         GuiControlGet, multiBoss,, ManagerHuntMultiBoss
-        if (!singleBoss && !multiBoss)
-        {
-            ManagerListRebuilding := true
-            LV_Modify(row, "-Check")
-            ManagerListRebuilding := false
-            GuiControl, +cCC0000, ManagerStatusText
-            GuiControl,, ManagerStatusText, Hay bat it nhat mot nhom su kien truoc khi tick acc.
-            return
-        }
+; if (!ManagerHuntSingleBoss && !ManagerHuntMultiBoss && !ManagerAutoTravel)
+; {
+;     MsgBox, , , Hay bat it nhat mot nhom su kien truoc khi tick acc.
+;     return
+; }
     }
     ManagerDesiredWorkers[gamePid] := want
     SaveManagerEnabledCharacters()
@@ -6815,6 +6816,25 @@ WriteDword(address, value)
     ok := DllCall("WriteProcessMemory", "Ptr", hProcess, "Ptr", address, "Ptr", &buf, "UPtr", 4, "UPtr*", written)
     return (ok && written = 4)
 }
+        ; --- TỰ ĐỘNG TRIỆU TẬP ĐỒNG ĐỘI & BẬT HELPER CHO CLASS DL ---
+        if (IsDarkLordClass) 
+        {
+            ; 1. Chọn skill triệu tập gán sẵn ở ô số 6
+            ControlSend, , 6, ahk_exe Engine.exe
+            Sleep, 250 
+            
+            ; 2. Click chuột phải ngầm ra đất để xuất chiêu gọi hội
+            ControlClick, x400 y300, ahk_exe Engine.exe, , RIGHT, 1, NA
+            
+            ; 3. Chờ đúng 5 giây (5000ms) để đồng đội load map và tập hợp
+            Sleep, 5000 
+            
+            ; 4. Kích hoạt tính năng tự động đánh bằng MU Helper (Bấm phím Home)
+            ControlSend, , {Home}, ahk_exe Engine.exe
+            Sleep, 200
+        }
+        ; ------------------------------------------------------------
+
 
 ; ========== UI HELPERS ==========
 SetStatus(message, color)
@@ -6828,3 +6848,182 @@ SetHuntStatus(message, color)
     GuiControl, +c%color%, HuntStatusText
     GuiControl,, HuntStatusText, %message%
 }
+; ==============================================================================
+; LOGIC HIỂN THỊ VÀ CẬP NHẬT BỘ LỌC EVENT BOSS (VỊ TRÍ 2)
+; ==============================================================================
+MoBangChonEvent:
+    Gui, EventGui:Destroy
+    Gui, EventGui:+AlwaysOnTop +Owner%MainGuiHwnd%
+    Gui, EventGui:Margin, 15, 12
+    
+    SetScaledGuiFont(10, "Bold")
+    Gui, EventGui:Add, Text, xm ym, TÍCH CHỌN CÁC EVENT / BOSS THAM GIA:
+    SetScaledGuiFont(9, "Norm")
+    
+    ; --- ĐOẠN THAY THẾ: Đặt tên chi tiết cho từng mục Boss theo dòng hiển thị ---
+    TenEvents := ["Dong 1: Dai Chien Lorencia"
+                , "Dong 2: Phu Thuy Trang"
+                , "Dong 3: Tu Than Xuong So"
+                , "Dong 4: Rong Do"
+                , "Dong 5: Tho Ngoc"
+                , "Dong 6: Mua He"
+                , "Dong 7: Boss Viem Dia Chua"
+                , "Dong 8: Boss Class"
+                , "Dong 9: Kho Bau Hoang Toc"
+                , "Dong 10: Boss Chien Than"
+                , "Dong 11: Boss Ma Than Tuong"
+                , "Dong 12: Boss Ta Than Tuong"
+                , "Dong 13: Boss Nguu Vuong"
+                , "Dong 14: Boss Thuy Hoang De"
+                , "Dong 15: Boss Anubis"
+                , "Dong 16: Boss Long Vuong"
+                , "Dong 17: Boss Hon Thach"
+                , "Dong 18: Boss Ma Thu"]
+
+    Loop, 18 {
+        RowIdx := A_Index
+        IsChecked := InStr("," . SavedEventsAllowed . ",", "," . RowIdx . ",") ? "Checked" : ""
+        
+        if (RowIdx = 1)
+            Options := "xm y+10 w240"
+        else if (RowIdx = 10)
+            Options := "x+20 ym+30 w240" 
+        else
+            Options := "xp y+8 w240"
+            
+        FinalOptions := ScaleGuiOptions(Options) . " vCbEvent" . RowIdx . " " . IsChecked
+        Gui, EventGui:Add, CheckBox, %FinalOptions%, % TenEvents[RowIdx]
+    }
+    
+    SetScaledGuiFont(9, "Bold")
+    Gui, EventGui:Add, Button, xm y+20 w140 h32 gLuuCauHinhEvent, LƯU BỘ LỌC
+    Gui, EventGui:Show,, Cấu hình Event Boss
+
+; ==============================================================================
+; HÀM CẬP NHẬT ĐỘNG MẢNG QUÉT BOSS THEO CHECKBOX ĐÃ LƯU
+; ==============================================================================
+LuuCauHinhEvent:
+    Gui, EventGui:Submit
+    
+    NewAllowed := ""
+    Loop, 18 {
+        if (CbEvent%A_Index%) {
+            NewAllowed .= (NewAllowed = "" ? "" : ",") . A_Index
+        }
+    }
+    
+    SavedEventsAllowed := NewAllowed
+    RegWrite, REG_SZ, HKCU, %SettingsRegKey%, EventsAllowed, %SavedEventsAllowed%
+    
+    ; Gọi hàm xử lý nạp lại mảng ưu tiên sự kiện
+    CapNhatMangPriorityEvent()
+    
+    MsgBox, 64, MU-PKZ, Da cap nhat bo loc Event thanh cong!
+return
+
+; ==============================================================================
+; HÀM CẬP NHẬT ĐỘNG MẢNG QUÉT BOSS THEO CHECKBOX ĐÃ LƯU (ĐẶT NGAY DƯỚI RETURN)
+; ==============================================================================
+CapNhatMangPriorityEvent() {
+    global PriorityEventRows, SavedEventsAllowed
+    PriorityEventRows := [] ; Reset lại mảng cũ
+    
+    ; Tách chuỗi cấu hình "6,5,2..." thành từng số rồi nạp vào mảng quét của Tool
+    Loop, Parse, SavedEventsAllowed, `,
+    {
+        if (A_LoopField != "") {
+            PriorityEventRows.Push(A_LoopField + 0)
+        }
+    }
+}
+; ==============================================================================
+; LOGIC HIỂN THỊ VÀ ĐỒNG BỘ BỘ LỌC EVENT BOSS CHO GIAO DIỆN MANAGER
+; ==============================================================================
+MoBangChonEventManager:
+    Gui, MgrEventGui:Destroy
+    Gui, MgrEventGui:+AlwaysOnTop +Owner%MainGuiHwnd%
+    Gui, MgrEventGui:Margin, 15, 12
+    
+    SetScaledGuiFont(10, "Bold")
+    Gui, MgrEventGui:Add, Text, xm ym, TICH CHON CAC EVENT DONG BO CHO ALL ACC:
+    SetScaledGuiFont(9, "Norm")
+    
+    ; Danh sách tên 18 dòng Event/Boss viết không dấu để chống lỗi font tuyệt đối
+    TenEvents := ["Dong 1: Dai Chien Lorencia"
+                , "Dong 2: Phu Thuy Trang"
+                , "Dong 3: Tu Than Xuong So"
+                , "Dong 4: Rong Do"
+                , "Dong 5: Tho Ngoc"
+                , "Dong 6: Mua He"
+                , "Dong 7: Boss Viem Dia Chua"
+                , "Dong 8: Boss Class"
+                , "Dong 9: Kho Bau Hoang Toc"
+                , "Dong 10: Boss Chien Than"
+                , "Dong 11: Boss Ma Than Tuong"
+                , "Dong 12: Boss Ta Than Tuong"
+                , "Dong 13: Boss Nguu Vuong"
+                , "Dong 14: Boss Thuy Hoang De"
+                , "Dong 15: Boss Anubis"
+                , "Dong 16: Boss Long Vuong"
+                , "Dong 17: Boss Hon Thach"
+                , "Dong 18: Boss Ma Thu"]
+
+    ; Vòng lặp tạo đầy đủ 18 ô Checkbox phân thành 2 cột dựa trên chuỗi cấu hình chung
+    Loop, 18 {
+        RowIdx := A_Index
+        IsChecked := InStr("," . SavedEventsAllowed . ",", "," . RowIdx . ",") ? "Checked" : ""
+        
+        if (RowIdx = 1)
+            Options := "xm y+10 w240"
+        else if (RowIdx = 10)
+            Options := "x+20 ym+30 w240" 
+        else
+            Options := "xp y+8 w240"
+            
+        FinalOptions := ScaleGuiOptions(Options) . " vMgrCbEvent" . RowIdx . " " . IsChecked
+        Gui, MgrEventGui:Add, CheckBox, %FinalOptions%, % TenEvents[RowIdx]
+    }
+    
+    SetScaledGuiFont(9, "Bold")
+    Gui, MgrEventGui:Add, Button, xm y+20 w140 h32 gLuuCauHinhEventManager, LUU DONG BO
+    Gui, MgrEventGui:Show,, Bo loc Event - Manager
+return
+
+LuuCauHinhEventManager:
+    ; Thu thập dữ liệu từ các CheckBox trong bảng cấu hình nâng cao
+    Gui, MgrEventGui:Submit
+    
+    NewAllowed := ""
+    Loop, 18 {
+        if (MgrCbEvent%A_Index%) {
+            NewAllowed .= (NewAllowed = "" ? "" : ",") . A_Index
+        }
+    }
+    
+    ; --- ĐOẠN ĐÃ NÂNG CẤP: Gán giá trị 1 và cập nhật trực tiếp lên biến kiểm tra của GUI Manager ---
+    ManagerHuntSingleBoss := 1
+    ManagerHuntMultiBoss := 1
+    ManagerAutoTravel := 1
+    
+    ; Lưu chuỗi cấu hình 18 dòng vào hệ thống Registry
+    SavedEventsAllowed := NewAllowed
+    RegWrite, REG_SZ, HKCU, %SettingsRegKey%, EventsAllowed, %SavedEventsAllowed%
+    
+    ; Nạp lại mảng ưu tiên để các tài khoản nhận diện dòng mới tích
+    CapNhatMangPriorityEvent()
+    
+    ; Gửi tín hiệu thông báo cho toàn bộ các cửa sổ game cày ngầm (Workers) cập nhật theo
+    NotifyManagerWorkersSettingsChanged()
+    
+    ; Tự động kích hoạt lại hàm cập nhật trạng thái tùy chọn của Manager để tắt dòng thông báo đỏ
+    Gosub, ManagerOptionsChanged
+    
+    MsgBox, 64, MU-PKZ, Da dong bo bo loc Event cho toan bo cac tai khoan!
+	
+SaveDLClassSetting:
+    Gui, Submit, NoHide
+    ; Lưu trạng thái vào khóa Registry dùng chung của hệ thống MU-PKZ
+    RegWrite, REG_DWORD, HKCU, %SettingsRegKey%, IsDarkLordClass, %IsDarkLordClass%
+return
+
+
