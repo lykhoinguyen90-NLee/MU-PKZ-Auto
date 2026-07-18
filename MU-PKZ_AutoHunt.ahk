@@ -996,6 +996,84 @@ HuntLoop:
 
     ; Helper is the only combat/loot core. No synthetic attack click or Space.
     BuiltinHuntTick(loopGeneration)
+	
+    ; =========================================================================
+    ; --- ĐOẠN MÃ TRIỆU TẬP & ĐÓNG BĂNG LUỒNG ĐÁNH 5 GIÂY CHO CLASS DL ---
+    ; =========================================================================
+    if (IsDarkLordClass) 
+    {
+        ; Nếu radar quét thấy Boss và chưa triệu tập ở trận này
+        if (CurrentTarget != -1 && !DLHasSummonedOnThisEvent) 
+        {
+            ; Tắt biến trạng thái Helper trong tool trước
+            if (BuiltinMode != "") {
+                BuiltinMode := ""
+            }
+            
+            ; Lấy HWND định danh cửa sổ game đang chạy ngầm
+            ControlGet, hwnd, hWnd,, , ahk_exe Engine.exe
+            
+            ; Ép tắt MU Helper (Phím Home) để giải phóng trạng thái khóa chiêu thức
+            PostMessage, 0x0100, 0x24, 0, , ahk_id %hwnd% ; WM_KEYDOWN Home
+            Sleep, 400
+            
+            ; --- SỬA ĐỔI CHUẨN: Ép giữ phím số 6 ngầm để game nhận diện tốt hơn ---
+            PostMessage, 0x0100, 0x36, 0, , ahk_id %hwnd% ; Nhấn giữ phím 6
+            Sleep, 150
+            PostMessage, 0x0101, 0x36, 0, , ahk_id %hwnd% ; Thả phím 6
+            Sleep, 500 ; Chờ vòng tròn kỹ năng của game chuyển sang chiêu Triệu tập
+            
+            ; Click chuột phải ngầm ra giữa màn hình game để xuất chiêu Triệu Tập (Summon)
+            ControlClick, x400 y300, ahk_exe Engine.exe, , RIGHT, 1, NA
+            
+            ; Đóng băng toàn bộ luồng lặp của Tool đúng 5 giây để chờ đồng đội tập hợp
+            Sleep, 5000 
+            
+            ; Đánh dấu đã gọi hội xong để mở khóa cho hàm StartBuiltinHelper hoạt động trở lại
+            DLHasSummonedOnThisEvent := true
+            
+            ; Kích hoạt phím Home ngầm để bật lại MU Helper của game tiến hành đánh Boss
+            PostMessage, 0x0100, 0x24, 0, , ahk_id %hwnd% ; WM_KEYDOWN Home
+            Sleep, 300
+            
+            return ; Thoát sớm vòng lặp hiện tại
+        }
+    }
+    
+    ; Reset lại cờ triệu tập khi trận săn Boss kết thúc hoàn toàn (CurrentTarget quay về -1)
+    if (CurrentTarget = -1 && DLHasSummonedOnThisEvent) {
+        DLHasSummonedOnThisEvent := false
+    }
+    ; =========================================================================
+
+StartBuiltinHelper()
+{
+    global
+    
+    ; --- KHÓA KHÔNG CHO TỰ BẬT HELPER NẾU DL CHƯA HÚ GỌI HỘI XONG ---
+    if (IsDarkLordClass && CurrentTarget != -1 && !DLHasSummonedOnThisEvent)
+    {
+        return false ; Chặn đứng lệnh bật Helper
+    }
+    ; -----------------------------------------------------------------
+    
+    ; ... (Giữ nguyên toàn bộ các dòng code gốc phía dưới của hàm này) ...
+			
+            PostMessage, 0x0100, 0x24, 0, , ahk_id %hwnd% ; Bấm Home bảo hiểm bật Helper
+            Sleep, 300
+            
+            ; Thoát hàm ngay lập tức ở vòng lặp này, nhường luồng cho vòng lặp sau đánh quái
+            return
+        }
+    }
+    
+    ; Reset lại cờ triệu tập khi mục tiêu săn Boss kết thúc (CurrentTarget quay về -1)
+    if (CurrentTarget = -1 && DLHasSummonedOnThisEvent) {
+        DLHasSummonedOnThisEvent := false
+    }
+    ; =========================================================================
+
+	
 return
 
 IsHuntTokenValid(expectedGeneration := -1)
@@ -4166,7 +4244,7 @@ IsBuiltinHelperActive()
     return (ReadBuiltinHelperActive(active) && active)
 }
 
-StartBuiltinHelper()
+StartBuiltinHelper
 {
     global BuiltinHelperStartAddress
     if (!ReadBuiltinHelperActive(active))
@@ -6816,25 +6894,6 @@ WriteDword(address, value)
     ok := DllCall("WriteProcessMemory", "Ptr", hProcess, "Ptr", address, "Ptr", &buf, "UPtr", 4, "UPtr*", written)
     return (ok && written = 4)
 }
-        ; --- TỰ ĐỘNG TRIỆU TẬP ĐỒNG ĐỘI & BẬT HELPER CHO CLASS DL ---
-        if (IsDarkLordClass) 
-        {
-            ; 1. Chọn skill triệu tập gán sẵn ở ô số 6
-            ControlSend, , 6, ahk_exe Engine.exe
-            Sleep, 250 
-            
-            ; 2. Click chuột phải ngầm ra đất để xuất chiêu gọi hội
-            ControlClick, x400 y300, ahk_exe Engine.exe, , RIGHT, 1, NA
-            
-            ; 3. Chờ đúng 5 giây (5000ms) để đồng đội load map và tập hợp
-            Sleep, 5000 
-            
-            ; 4. Kích hoạt tính năng tự động đánh bằng MU Helper (Bấm phím Home)
-            ControlSend, , {Home}, ahk_exe Engine.exe
-            Sleep, 200
-        }
-        ; ------------------------------------------------------------
-
 
 ; ========== UI HELPERS ==========
 SetStatus(message, color)
