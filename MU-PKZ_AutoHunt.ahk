@@ -13,7 +13,7 @@ SetKeyDelay, 0, 0
 ; ========== GLOBAL VARIABLES ==========
 ; --- Process / Memory ---
 global IsClassDL := 1                ; Đặt thành 1 nếu acc này là DL, đặt thành 0 nếu là class khác
-global SummonSkillKey := "6"         ; Phím cài đặt skill Triệu Hồi (Summon) trong game
+global SummonSkillKey := "5"         ; Phím cài đặt skill Triệu Hồi (Summon) trong game
 global HasSummonedCurrentBoss := 0   ; Biến trạng thái để kiểm tra xem đã triệu hồi ở Boss này chưa
 global hProcess := 0
 global GamePid := 0
@@ -411,6 +411,9 @@ Gui, Add, Button, % ScaleGuiOptions("x+8 yp-3 w75 h26 gAttachGame"), Gan lai
 Gui, Add, Text, % ScaleGuiOptions("xm y+9"), Scale (keo goc):
 Gui, Add, Slider, % ScaleGuiOptions("x+8 yp-4 w270 h24 vUiScaleSlider gChangeUiScale Range50-200 ToolTip"), 100
 Gui, Add, Text, % ScaleGuiOptions("x+7 yp+4 w50 vUiScaleValueText"), 100`%
+Gui, Add, CheckBox, % ScaleGuiOptions("xm+12 y+6 vIsClassDL gToggleClassDL"), Nhân vật Dark Lord (DL)
+SetScaledGuiFont(10, "Bold")
+
 
 ; --- Module Checkboxes ---
 SetScaledGuiFont(10, "Bold")
@@ -446,15 +449,46 @@ Gui, Add, Text, % ScaleGuiOptions("xm y+14 w460 h34 vEventStatusText c7A3E00"), 
 Gui, Add, Text, % ScaleGuiOptions("xm y+10 w460 h42 vStatusText c0066CC"), Mo game va vao nhan vat, sau do bam Gan lai.
 Gui, Add, CheckBox, % ScaleGuiOptions("xm y+0 w0 h0 vHuntEnabled Hidden"), hunt
 
+; --- Khu vực nạp cấu hình chuẩn ---
 ApplyPersistentSettings()
+GuiControl,, IsClassDL, %IsClassDL%
+RegRead, SavedIsClassDL, HKCU, %SettingsRegKey%, SavedIsClassDL
+if ErrorLevel
+    SavedIsClassDL := 1 
+GuiControl,, IsClassDL, %SavedIsClassDL%
+IsClassDL := SavedIsClassDL
+
+; --- CHÈN LỆNH GỌI HÀM VÀO ĐÂY KHI KHỞI ĐỘNG TOOL ---
+CapNhatMangPriorityEvent()
+; ----------------------------------------------------
+
+GuiControl, ChooseString, ManagerComboClassChoice, %SavedComboClass%
+
 Gui, Show, Hide, MU-PKZ Worker - GamePID %WorkerTargetPid%
+
+ApplyPersistentSettings()
+
+; --- CHÈN LỆNH NÀY VÀO ĐỂ SỬA LỖI ACC PHỤ ĐỨNG IM ---
+CapNhatMangPriorityEvent()
+; ---------------------------------------------------
+
+Gui, Show, Hide, MU-PKZ Worker - GamePID %WorkerTargetPid%
+
 SetTimer, RefreshEngine, 250
 SetTimer, HuntLoop, 100
 SetTimer, RefreshOrdinaryEvents, 1000
 SetTimer, EventRouteLoop, 1000
 SetTimer, ComboLoop, -1
-Gosub, AttachGame
+
+; --- THAY THẾ DÒNG GOSUB BẰNG LỆNH GÁN TRỰC TIẾP TẠI ĐÂY ---
+WinGet, GameHwnd, ID, ahk_pid %WorkerTargetPid%
+if (GameHwnd) {
+    TargetGameWindowHwnd := GameHwnd
+}
+; -----------------------------------------------------------
+
 WorkerHuntDesired := WorkerAutoStart ? true : false
+
 WorkerHuntStarting := WorkerHuntDesired
 UpdateWorkerWindowTitle()
 if (WorkerAutoStart)
@@ -509,14 +543,12 @@ InitializeManagerGui:
         Gui, Add, CheckBox, % ScaleGuiOptions("x455 y" . posY . " vFilterBoss" . row . " gOnBossFilterChanged " . isChecked), %name%
     }
 
-    ; --- KHU VUC CAC NUT BAM VA TEXT TRANG THAI ---
-    Gui, Add, Button, % ScaleGuiOptions("x38 y465 w135 h32 gManagerStartSelected"), CHỌN TẤT CẢ
-    Gui, Add, Button, % ScaleGuiOptions("x185 y465 w135 h32 gManagerStopSelected"), BỎ CHỌN TẤT CẢ
-    Gui, Add, Text, % ScaleGuiOptions("x335 y470 w295"), Ctrl+F1: Tạm Dừng/ Khôi Phục Nhóm Chọn
-    Gui, Add, Text, % ScaleGuiOptions("x38 y505 w614 h28 vManagerStatusText c666666"), Chọn Nhân Vật Để Auto Ngay
-
-
-
+; === KHU VỰC NÚT BẤM VÀ TEXT TRẠNG THÁI CHUẨN ===
+Gui, Add, CheckBox, % ScaleGuiOptions("x38 y465 vIsClassDL gToggleClassDL Checked"), Tài khoản đang chạy là Class DL (Chúa Tể)
+Gui, Add, Button, % ScaleGuiOptions("x38 y495 w135 h32 gManagerStartSelected"), CHỌN TẤT CẢ
+Gui, Add, Button, % ScaleGuiOptions("x185 y495 w135 h32 gManagerStopSelected"), BỎ CHỌN TẤT CẢ
+Gui, Add, Text, % ScaleGuiOptions("x335 y500 w295"), Ctrl+ F1: Tạm Dừng/ Khôi Phục Nhóm Chọn
+Gui, Add, Text, % ScaleGuiOptions("x38 y525 w614 h28 vManagerStatusText c666666"), Chọn Nhân Vật Để Auto Ngay
 
     Gui, Tab, 2
     Gui, Add, Text, % ScaleGuiOptions("x38 y100 w610 h38 c0066CC"), Chi duoc chon 1 nhan vat. Macro combo chay nen tren dung Engine da chon.
@@ -666,9 +698,42 @@ WorkerRetryComboStart:
     RetryPendingWorkerComboStart()
 return
 
-AttachGame:
-    AttachToEngine(false)
+ToggleClassDL:
+Gui, Submit, NoHide
+
+; 1. Ghi cấu hình ô tích Class DL vào Registry
+RegWrite, REG_DWORD, HKCU, %SettingsRegKey%, SavedIsClassDL, %IsClassDL%
+
+; 2. SỬA LỖI TRIỆT ĐỂ: Tự động gom trạng thái 18 ô Checkbox Boss thành chuỗi cấu hình dạng "1,2,5..."
+if (ManagerMode) {
+    NewEventsAllowedStr := ""
+    ; Vòng lặp quét qua 18 ô Checkbox dựa trên biến mảng BossFilters sẵn có trong file gốc của bạn
+    Loop, 18 {
+        if (BossFilters[A_Index]) {
+            if (NewEventsAllowedStr == "")
+                NewEventsAllowedStr := A_Index
+            else
+                NewEventsAllowedStr := NewEventsAllowedStr . "," . A_Index
+        }
+    }
+    ; Gán lại cho biến hệ thống và ghi thẳng xuống Registry mà không cần gọi nhãn phụ nào cả
+    SavedEventsAllowed := NewEventsAllowedStr
+    RegWrite, REG_SZ, HKCU, %SettingsRegKey%, SavedEventsAllowed, %SavedEventsAllowed%
+}
+
+; 3. Nạp lại mảng danh sách Boss di chuyển cho tiến trình hiện tại
+CapNhatMangPriorityEvent()
+
+; 4. Phát tín hiệu thông báo cho toàn bộ các tài khoản phụ (Worker) tải lại đường đi mới
+if (ManagerMode) {
+    NotifyManagerWorkersSettingsChanged()
+}
 return
+
+
+; -----------------------------------------------------
+
+
 
 SaveSettings:
     SavePersistentSettings()
@@ -1010,6 +1075,40 @@ EventRouteLoop:
 return
 
 HuntLoop:
+; ========================================================
+; CHU TRÌNH PHẢN XẠ VÀ GỌI ĐỒNG ĐỘI CHO CLASS DL
+; ========================================================
+if (IsClassDL && CurrentTargetMonsterIndex != -1) {
+    
+    ; 1. Bật hệ thống tự động tìm và áp sát mục tiêu của game MU (Bypass qua lỗi đứng im)
+    if (ReadBuiltinHelperActive(helperActive) && !helperActive) {
+        StartBuiltinHelper()
+    }
+    Sleep, 300 ; Chờ nhân vật tự động áp sát chạy lại gần Boss
+    
+    ; 2. CLICK CHUỘT TRÁI VÀO Ô SỐ 5 (Tọa độ thực tế Client máy bạn: X=913, Y=652)
+    PostMessage, 0x0201, 1, ((652 << 16) | 913), , ahk_id %GameHwnd% ; WM_LBUTTONDOWN (Nhấn chuột)
+    Sleep, 150
+    PostMessage, 0x0202, 0, ((652 << 16) | 913), , ahk_id %GameHwnd% ; WM_LBUTTONUP (Thả chuột)
+    
+    ; 3. ĐỨNG CHỜ ĐÚNG 5 GIÂY theo yêu cầu của bạn
+    Sleep, 5000
+    
+    ; 4. GIẢ LẬP BẤM PHÍM "HOME" ẨN VÀO CỬA SỔ GAME (Mã Hex: 0x24)
+    PostMessage, 0x0100, 0x24, 0x01470001, , ahk_id %GameHwnd% ; WM_KEYDOWN
+    Sleep, 50
+    PostMessage, 0x0101, 0x24, 0xC1470001, , ahk_id %GameHwnd% ; WM_KEYUP
+    
+    ; Giải phóng mục tiêu để kết thúc chu trình xử lý Boss hiện tại
+    CurrentTargetMonsterIndex := -1
+    LastSummonTime := A_TickCount
+}
+; ========================================================
+
+; ... [Giữ nguyên toàn bộ các đoạn mã quét quái mặc định của file gốc phía dưới] ...
+
+
+
     loopGeneration := HuntGeneration
     GuiControlGet, huntOn,, HuntEnabled
     if (!huntOn || !hProcess || !CharactersBase || !HeroPtr || TravelBusy)
@@ -1783,7 +1882,7 @@ RefreshManagerAccounts()
     }
     for _, account in accounts
     {
-        huntState := account.huntOn ? "DANG SAN NEN" : (account.state = "STARTING" ? "Đang Khởi Động" : "Đang Đứng Ngắm Hoa Lệ Rơi")
+        huntState := account.huntOn ? "Đang ăn Buffet BOSS" : (account.state = "STARTING" ? "Đang Khởi Động" : "Đang Đứng Ngắm Hoa Lệ Rơi")
         Gui, ListView, ManagerAccounts
         huntOption := ManagerDesiredWorkers[account.pid] ? "Check" : ""
         LV_Add(huntOption, "", account.character, account.pid, account.mapId, huntState)
@@ -2534,7 +2633,13 @@ ApplyMacroProfileRevision()
     return true
 }
 
-LoadPersistentSettings()
+LoadPersistentSettings() {
+    global
+    ; ... (Các dòng RegRead cũ của bạn giữ nguyên) ...
+    RegRead, SavedIsClassDL, HKCU, %SettingsRegKey%, SavedIsClassDL
+    if ErrorLevel
+        SavedIsClassDL := 0
+}
 {
     global SavedHuntModuleEnabled, SavedComboModuleEnabled
     global SavedActivePatrol, SavedLootAfterKill, SavedAutoEventTravel
@@ -2573,6 +2678,15 @@ LoadPersistentSettings()
 }
 
 ApplyPersistentSettings()
+
+; --- CHÈN THÊM ĐOẠN NÀY ĐỂ WORKER NHẬN DIỆN DL ---
+RegRead, SavedIsClassDL, HKCU, %SettingsRegKey%, SavedIsClassDL
+if !ErrorLevel
+    IsClassDL := SavedIsClassDL
+; ------------------------------------------------
+
+GuiControl,, HuntEnabled, %SavedHuntModuleEnabled%
+
 {
     global SavedHuntModuleEnabled, SavedComboModuleEnabled
     global SavedActivePatrol, SavedLootAfterKill, SavedAutoEventTravel
@@ -6987,20 +7101,35 @@ LuuCauHinhEvent:
 return
 
 ; ==============================================================================
-; HÀM CẬP NHẬT ĐỘNG MẢNG QUÉT BOSS THEO CHECKBOX ĐÃ LƯU (ĐẶT NGAY DƯỚI RETURN)
+; HÀM CẬP NHẬT MẢNG QUÉT BOSS ĐÃ ĐƯỢC FIX LỖI XUNG ĐỘT BIẾN LOCAL
 ; ==============================================================================
 CapNhatMangPriorityEvent() {
-    global PriorityEventRows, SavedEventsAllowed
-    PriorityEventRows := [] ; Reset lại mảng cũ
+    global PriorityEventRows, SavedEventsAllowed, SettingsRegKey, ManagerMode
+    PriorityEventRows := [] ; Xóa sạch mảng cũ để nạp mới
+    chuoiCauHinh := ""
     
-    ; Tách chuỗi cấu hình "6,5,2..." thành từng số rồi nạp vào mảng quét của Tool
-    Loop, Parse, SavedEventsAllowed, `,
+    if (ManagerMode) {
+        chuoiCauHinh := SavedEventsAllowed
+    } else {
+        ; Nếu là Worker, đọc trực tiếp chuỗi Boss từ Registry hệ thống
+        RegRead, chuoiCauHinh, HKCU, %SettingsRegKey%, SavedEventsAllowed
+    }
+    
+    if (ErrorLevel || chuoiCauHinh == "")
+        return
+        
+    ; Bóc tách chuỗi "1,2,5" thành các phần tử số nguyên chính xác
+    Loop, Parse, chuoiCauHinh, `,
     {
         if (A_LoopField != "") {
-            PriorityEventRows.Push(A_LoopField + 0)
+            soHàng := A_LoopField + 0 ; Ép kiểu số nguyên (Integer) bắt buộc cho mảng di chuyển
+            PriorityEventRows.Push(soHàng)
         }
     }
 }
+
+
+
 ; ==============================================================================
 ; LOGIC HIỂN THỊ VÀ ĐỒNG BỘ BỘ LỌC EVENT BOSS CHO GIAO DIỆN MANAGER
 ; ==============================================================================
@@ -7118,7 +7247,7 @@ OnBossFilterChanged:
         if (HasSummonedCurrentBoss == 0) 
         {
             ; 1. Bấm phím skill số 6 cài sẵn chiêu Triệu Hồi
-            ControlSend,, %SummonSkillKey%, ahk_id %hwndGame%
+            ControlSend,, %SummonSkillKey%, ahk_id %GameHwnd%
             Sleep, 300 ; Chờ 0.3 giây cho game chuyển đổi skill hoàn tất
             
             ; 2. Click chuột phải chạy nền vào tâm màn hình (tọa độ x400 y300) để Triệu Hồi
@@ -7134,8 +7263,15 @@ OnBossFilterChanged:
 
     ; Sau khi xử lý DL xong (hoặc nếu là Class khác), tiến hành bật Helper như bình thường
     ; Hãy sửa phím {End} thành {Home} nếu server của bạn dùng phím Home để bật Helper nhé
-    ControlSend,, {End}, ahk_id %hwndGame% 
+    ControlSend,, {End}, ahk_id %GameHwnd% 
     ; ================================================
-
-	
-return
+ApplyPersistentSettings() {
+    global
+    ; Đồng bộ trạng thái ô tích từ cấu hình đã lưu
+    RegRead, SavedIsClassDL, HKCU, %SettingsRegKey%, SavedIsClassDL
+    if ErrorLevel
+        SavedIsClassDL := 1
+    IsClassDL := SavedIsClassDL
+AttachGame:
+    return
+}
