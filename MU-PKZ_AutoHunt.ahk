@@ -58,6 +58,28 @@ global ManagerComboClass := "RF"
 global ManagerComboSpeedPercent := 286
 global ManagerCtrlF1Remembered := {}
 global ManagerReconcileBusy := false
+global BossNames := ["Dong 1: Dai Chien Lorencia"
+                , "Dong 2: Phu Thuy Trang"
+                , "Dong 3: Tu Than Xuong So"
+                , "Dong 4: Rong Do"
+                , "Dong 5: Tho Ngoc"
+                , "Dong 6: Mua He"
+                , "Dong 7: Boss Viem Dia Chua"
+                , "Dong 8: Boss Class"
+                , "Dong 9: Kho Bau Hoang Toc"
+                , "Dong 10: Boss Chien Than"
+                , "Dong 11: Boss Ma Than Tuong"
+                , "Dong 12: Boss Ta Than Tuong"
+                , "Dong 13: Boss Nguu Vuong"
+                , "Dong 14: Boss Thuy Hoang De"
+                , "Dong 15: Boss Anubis"
+                , "Dong 16: Boss Long Vuong"
+                , "Dong 17: Boss Hon Thach"
+                , "Dong 18: Boss Ma Thu"]
+
+; Khai báo biến lưu trạng thái bật/tắt (1 là bật, 0 là tắt) cho từng Boss
+global BossFilters := {1:0, 2:1, 3:0, 4:0, 5:1, 6:1, 7:1, 8:0, 9:1, 10:1, 11:1, 12:1, 13:1, 14:1, 15:1, 16:1, 17:1, 18:1}
+
 
 ; --- Character Memory Layout ---
 global CharactersBase := 0
@@ -453,14 +475,45 @@ InitializeManagerGui:
     Gui, Add, Text, % ScaleGuiOptions("x172 y102 w360 vManagerSummaryText c0066CC"), Dang tim cua so game...
     Gui, Add, Text, % ScaleGuiOptions("x38 y128 w610 h20 c666666"), Tick = bat auto ngay | Bo tick = dung auto ngay cho nhan vat do
     Gui, Add, ListView, % ScaleGuiOptions("x38 y150 w614 h185 vManagerAccounts gManagerAccountToggled Checked Grid AltSubmit"), Chon|Nhan vat|PID|Map|Trang thai
-    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h105"), BO LOC SU KIEN
-    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y370 vManagerHuntSingleBoss gManagerOptionsChanged Checked"), San boss don (Viem Dia/Chien Than/Ma Than/Ta Than)
-    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y395 vManagerHuntMultiBoss gManagerOptionsChanged Checked"), San su kien nhieu quai/boss
-    Gui, Add, CheckBox, % ScaleGuiOptions("x52 y420 vManagerAutoTravel gManagerOptionsChanged Checked"), Tu di chuyen theo bang su kien H
-    Gui, Add, Button, % ScaleGuiOptions("x38 y462 w135 h32 gManagerStartSelected"), TICK TAT CA
-    Gui, Add, Button, % ScaleGuiOptions("x184 y462 w135 h32 gManagerStopSelected"), BO TICK TAT CA
-    Gui, Add, Text, % ScaleGuiOptions("x335 y470 w295"), Ctrl+F1: tam dung/khoi phuc nhom tick
-    Gui, Add, Text, % ScaleGuiOptions("x38 y505 w614 h28 vManagerStatusText c666666"), Tick nhan vat de bat auto ngay.
+
+    ; --- KHU VUC BO LOC 18 DANH MUC BOSS ---
+    Gui, Add, GroupBox, % ScaleGuiOptions("x38 y345 w614 h115"), BO LOC 18 DANH MUC BOSS
+
+    ; Cot 1: Dong 1 den 6 (Bat dau tu x55 y365)
+    Loop, 6 {
+        row := A_Index
+        name := BossNames[row]
+        isChecked := BossFilters[row] ? "Checked" : ""
+        posY := 365 + (A_Index - 1) * 15
+        Gui, Add, CheckBox, % ScaleGuiOptions("x55 y" . posY . " vFilterBoss" . row . " gOnBossFilterChanged " . isChecked), %name%
+    }
+
+    ; Cot 2: Dong 7 den 12 (Bat dau tu x255 y365)
+    Loop, 6 {
+        row := A_Index + 6
+        name := BossNames[row]
+        isChecked := BossFilters[row] ? "Checked" : ""
+        posY := 365 + (A_Index - 1) * 15
+        Gui, Add, CheckBox, % ScaleGuiOptions("x255 y" . posY . " vFilterBoss" . row . " gOnBossFilterChanged " . isChecked), %name%
+    }
+
+    ; Cot 3: Dong 13 den 18 (Bat dau tu x455 y365)
+    Loop, 6 {
+        row := A_Index + 12
+        name := BossNames[row]
+        isChecked := BossFilters[row] ? "Checked" : ""
+        posY := 365 + (A_Index - 1) * 15
+        Gui, Add, CheckBox, % ScaleGuiOptions("x455 y" . posY . " vFilterBoss" . row . " gOnBossFilterChanged " . isChecked), %name%
+    }
+
+    ; --- KHU VUC CAC NUT BAM VA TEXT TRANG THAI ---
+    Gui, Add, Button, % ScaleGuiOptions("x38 y465 w135 h32 gManagerStartSelected"), CHỌN TẤT CẢ
+    Gui, Add, Button, % ScaleGuiOptions("x185 y465 w135 h32 gManagerStopSelected"), BỎ CHỌN TẤT CẢ
+    Gui, Add, Text, % ScaleGuiOptions("x335 y470 w295"), Ctrl+F1: Tạm Dừng/ Khôi Phục Nhóm Chọn
+    Gui, Add, Text, % ScaleGuiOptions("x38 y505 w614 h28 vManagerStatusText c666666"), Chọn Nhân Vật Để Auto Ngay
+
+
+
 
     Gui, Tab, 2
     Gui, Add, Text, % ScaleGuiOptions("x38 y100 w610 h38 c0066CC"), Chi duoc chon 1 nhan vat. Macro combo chay nen tren dung Engine da chon.
@@ -944,6 +997,7 @@ EventRouteLoop:
     GuiControlGet, autoTravel,, AutoEventTravel
     if (huntOn && autoTravel && !TravelBusy && IsHuntTokenValid(routeGeneration))
         UpdateEventRoute(routeGeneration)
+	
 return
 
 HuntLoop:
@@ -1720,14 +1774,14 @@ RefreshManagerAccounts()
     }
     for _, account in accounts
     {
-        huntState := account.huntOn ? "DANG SAN NEN" : (account.state = "STARTING" ? "Dang khoi dong" : "Dang dung")
+        huntState := account.huntOn ? "DANG SAN NEN" : (account.state = "STARTING" ? "Đang Khởi Động" : "Đang Đứng Ngắm Hoa Lệ Rơi")
         Gui, ListView, ManagerAccounts
         huntOption := ManagerDesiredWorkers[account.pid] ? "Check" : ""
         LV_Add(huntOption, "", account.character, account.pid, account.mapId, huntState)
         Gui, ListView, ManagerComboAccounts
         comboSelected := (ManagerComboSelectedPid = account.pid)
         comboOption := comboSelected ? "Check" : ""
-        comboState := account.comboClass != "OFF" ? ("DANG CHAY - " . account.comboClass) : "Tat"
+        comboState := account.comboClass != "OFF" ? ("Đang Chạy - " . account.comboClass) : "Tắt"
         LV_Add(comboOption, "", account.character, account.pid, account.mapId, comboState)
     }
     Gui, ListView, ManagerAccounts
@@ -7004,4 +7058,25 @@ SaveDLClassSetting:
     Gui, Submit, NoHide
     ; Lưu trạng thái vào khóa Registry dùng chung của hệ thống MU-PKZ
     RegWrite, REG_DWORD, HKCU, %SettingsRegKey%, IsDarkLordClass, %IsDarkLordClass%
+	
+RebuildPriorityRows() {
+    global PriorityEventRows, BossFilters
+    PriorityEventRows := []
+    
+    BasePriority :=
+    
+    for index, rowNum in BasePriority {
+        ; Nếu người dùng TÍCH CHỌN thì mới nạp hàng đó vào danh sách đi săn
+        if (BossFilters[rowNum] == 1) {
+            PriorityEventRows.Push(rowNum)
+        }
+    }
+}
+
+OnBossFilterChanged:
+    Gui, Submit, NoHide
+    Loop, 18 {
+        BossFilters[A_Index] := FilterBoss%A_Index%
+    }
+    RebuildPriorityRows() ; Cập nhật lại mảng ưu tiên ngay lập tức
 return
