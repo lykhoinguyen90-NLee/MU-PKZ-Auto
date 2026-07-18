@@ -853,27 +853,9 @@ ToggleHunt:
         BuiltinLootLastSeen := 0
         BuiltinMode := ""
         HuntSessionActive := true
-
-        ; === CHÈN ĐOẠN LOGIC DL AN TOÀN VÀO ĐÂY ===
-        if (IsClassDL == 1 && HasSummonedCurrentBoss == 0)
-        {
-            ; 1. Gửi lệnh bấm phím số 6 để chọn chiêu Triệu Hồi thành viên
-            ControlSend,, %SummonSkillKey%, ahk_id %GameHwnd%
-            Sleep, 300 ; Chờ 0.3 giây để game nhận diện chuyển skill
-            
-            ; 2. Click chuột phải chạy nền vào tâm màn hình để kích hoạt Triệu Hồi
-            ControlClick, x400 y300, ahk_id %GameHwnd%,, Right, 1, NA
-            
-            ; Khóa mục tiêu để không bị bấm lặp lại chiêu số 6 liên tục
-            HasSummonedCurrentBoss := 1
-            
-            ; 3. Đứng bất động đợi đúng 5 giây (5000ms) cho anh em Guild/Party bay lên đông đủ
-            Sleep, 5000
-        }
-        ; =========================================
-
         GuiControl, Disable, StartHuntButton
         GuiControl, Enable, StopHuntButton
+
         SetHuntStatus("Dang quet monster toan map...", "008000")
         GuiControlGet, autoTravel,, AutoEventTravel
         if (autoTravel)
